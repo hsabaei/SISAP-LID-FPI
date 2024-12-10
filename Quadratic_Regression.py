@@ -4,6 +4,7 @@ import torch.optim as optim
 import torch.nn as nn
 import pandas as pd
 import matplotlib.pyplot as plt
+import time
 
 from estimators import LIDEstimators
 
@@ -62,7 +63,7 @@ n_epochs = 2000
 
 loss_fn = nn.MSELoss(reduction='mean')
 optimizer = optim.SGD(model.parameters(), lr=lr)
-lid_estimator = LIDEstimators(device='cuda')
+lid_estimator = LIDEstimators(device=device)
 
 # Create the train_step function
 train_step = make_train_step(model, loss_fn, optimizer)
@@ -71,10 +72,13 @@ lid_FIE_data = []
 lid_Bay_data = []
 lid_IR_data = []
 lid_LL_data = []
-
+times_FIE = 0
+times_Bay = 0
+times_IR = 0
+times_LL = 0
 
 # Define the size k for the parameter history
-k = 13  
+k = 23
 
 # Initialize arrays to store the parameter history
 param_a_array = np.zeros(k)
@@ -106,27 +110,33 @@ for epoch in range(n_epochs):
     param_c_array[-1] = current_c
 
     if epoch >= k - 1:
+
         #FIE LID estimation for parameter 'a'
+        start_time = time.time()
         LID_FIE_a = lid_estimator.compute_FIE_LID(param_a_array)
         lid_FIE_data.append([epoch + 1, LID_FIE_a])
-
+        times_FIE += time.time() - start_time
 
         # Bayesian LID estimation for parameter 'a'
+        start_time = time.time()
         LID_Bay_a, Num1, Den1 = lid_estimator.compute_Bayesian_LID(param_a_array, Num0, Den0)
-
         # Update cumulative numerator and denominator for next iteration
         Num0 += Num1
         Den0 += Den1
-
         lid_Bay_data.append([epoch + 1, LID_Bay_a])
+        times_Bay += time.time() - start_time
 
         #IR LID estimation for parameter 'a'
+        start_time = time.time()
         LID_IR_a = lid_estimator.compute_IR_LID(param_a_array)
         lid_IR_data.append([epoch + 1, LID_IR_a])
+        times_IR += time.time() - start_time
 
         #Log-Log LID estimation for parameter 'a'
+        start_time = time.time()
         LID_LL_a = lid_estimator.compute_LL_LID(param_a_array[0:k-1], param_a_array[1:k], lr=0.01, n_epochs=2000)
         lid_LL_data.append([epoch + 1, LID_LL_a])
+        times_LL += time.time() - start_time
 
 # Check the learned parameters a, b, and c
 print("\nFinal learned parameters:")
@@ -134,61 +144,61 @@ print(f"a: {model.a.item():.4f}")
 print(f"b: {model.b.item():.4f}")
 print(f"c: {model.c.item():.4f}")
 
-lid_FIE_values = np.array([data[1] for data in lid_FIE_data[5:]])  
+true_lid = 1.0
 
-# Calculate mean and standard deviation
+# FIE:
+lid_FIE_values = np.array([data[1] for data in lid_FIE_data[5:]])
 mean_lid_FIE = np.mean(lid_FIE_values)
-std_dev_lid_FIE = np.std(lid_FIE_values)
+var_lid_FIE = np.var(lid_FIE_values)
+square_bias_FIE = (mean_lid_FIE - true_lid)**2
+msne_FIE =(square_bias_FIE + var_lid_FIE) / (true_lid**2)
 
-print("Mean of LID_FIE:", mean_lid_FIE)
-print("Standard Deviation of LID_FIE:", std_dev_lid_FIE)
-
-lid_Bay_values = np.array([data[1] for data in lid_Bay_data[5:]])  
-
-# Calculate mean and standard deviation
+# Bayesian:
+lid_Bay_values = np.array([data[1] for data in lid_Bay_data[5:]])
 mean_lid_Bay = np.mean(lid_Bay_values)
-std_dev_lid_Bay = np.std(lid_Bay_values)
+var_lid_Bay = np.var(lid_Bay_values)
+square_bias_Bay = (mean_lid_Bay - true_lid)**2
+msne_Bay = (square_bias_Bay + var_lid_Bay) / (true_lid**2)
 
-print("Mean of LID_Bayesian:", mean_lid_Bay)
-print("Standard Deviation of LID_Bayesian:", std_dev_lid_Bay)
-
-lid_IR_values = np.array([data[1] for data in lid_IR_data[5:]])  
-
-# Remove both NaN and infinite values from the array
+# IR:
+lid_IR_values = np.array([data[1] for data in lid_IR_data[5:]])
 valid_lid_IR_values = lid_IR_values[np.isfinite(lid_IR_values)]
-
-# Check if there are any valid values left after removal
 if valid_lid_IR_values.size > 0:
-    # Calculate mean and standard deviation of the clean data
     mean_lid_IR = np.mean(valid_lid_IR_values)
-    std_dev_lid_IR = np.std(valid_lid_IR_values)
-
-    print("Mean of LID_IR (excluding NaNs and Infs):", mean_lid_IR)
-    print("Standard Deviation of LID_IR (excluding NaNs and Infs):", std_dev_lid_IR)
+    var_lid_IR = np.var(valid_lid_IR_values)
+    square_bias_IR = (mean_lid_IR - true_lid)**2
+    msne_IR = (square_bias_IR + var_lid_IR) / (true_lid**2)
 else:
-    print("No valid LID_IR available (all values are NaN or Inf).")
+    # If no valid IR values, set them to NaN
+    mean_lid_IR = np.nan
+    var_lid_IR = np.nan
+    square_bias_IR = np.nan
+    msne_IR = np.nan
 
-lid_LL_values = np.array([data[1] for data in lid_LL_data[5:]])  
-
-# Calculate mean and standard deviation
+# Log-Log:
+lid_LL_values = np.array([data[1] for data in lid_LL_data[5:]])
 mean_lid_LL = np.mean(lid_LL_values)
-std_dev_lid_LL = np.std(lid_LL_values)
+var_lid_LL = np.var(lid_LL_values)
+square_bias_LL = (mean_lid_LL - true_lid)**2
+msne_LL = (square_bias_LL + var_lid_LL) / (true_lid**2)
 
-print("Mean of LID_Log-Log:", mean_lid_LL)
-print("Standard Deviation of LID_Log-Log:", std_dev_lid_LL)  
+results_dict = {
+    "Estimator": ["FIE", "Bayesian", "IR", "Log-Log"],
+    "Mean": [mean_lid_FIE, mean_lid_Bay, mean_lid_IR, mean_lid_LL],
+    "Variance": [var_lid_FIE, var_lid_Bay, var_lid_IR, var_lid_LL],
+    "Square Bias": [square_bias_FIE, square_bias_Bay, square_bias_IR, square_bias_LL],
+    "MSNE": [msne_FIE, msne_Bay, msne_IR, msne_LL],
+    "Time(s)": [times_FIE, times_Bay, times_IR, times_LL]
+}
+
+df = pd.DataFrame(results_dict)
+print(df.to_string(index=False))  
 
 # Create DataFrames for lid_FIE_data and lid_Bay_data
 lid_FIE_df = pd.DataFrame(lid_FIE_data, columns=['Epoch', 'LID_FIE'])
 lid_Bay_df = pd.DataFrame(lid_Bay_data, columns=['Epoch', 'LID_Bayesian'])
 lid_IR_df = pd.DataFrame(lid_IR_data, columns=['Epoch', 'LID_IR'])
 lid_LL_df = pd.DataFrame(lid_LL_data, columns=['Epoch', 'LID_Log-Log'])
-
-# Display the DataFrames
-#print("\nLID FIE values over epochs:")
-#print(lid_FIE_df.head())
-
-#print("\nLID Bayesian values over epochs:")
-#print(lid_Bay_df.head())
 
 plt.figure(figsize=(8, 6))
 
