@@ -121,8 +121,8 @@ for epoch in range(n_epochs):
         start_time = time.time()
         LID_Bay_a, Num1, Den1 = lid_estimator.compute_Bayesian_LID(param_a_array, Num0, Den0)
         # Update cumulative numerator and denominator for next iteration
-        Num0 += Num1
-        Den0 += Den1
+        Num0 = Num1
+        Den0 = Den1
         lid_Bay_data.append([epoch + 1, LID_Bay_a])
         times_Bay += time.time() - start_time
 
