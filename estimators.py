@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import torch.optim as optim
 import torch.nn as nn
+EPS = 1e-12
 
 class LIDEstimators:
     def __init__(self, device='cpu'):
@@ -35,64 +36,78 @@ class LIDEstimators:
         k = len(phi)
 
         # w0 and R for numerator
-        w0 = phi[0] - phi[k-1]
-        R = phi[1:k-2] - phi[k-1]
+        limit0 = np.mean(phi[-3:])
+        R = np.abs(phi[0:k-2] - limit0) 
+        w0 = np.max(R) if R.size else EPS
         Hill_Num = self.calculate_Hill(R, w0)
 
         # w1 and FR for denominator
-        w1 = phi[1] - phi[k-1]
-        FR = phi[2:k-1] - phi[k-1]
+        FR = np.abs(phi[1:k-1] - limit0) 
+        w1 = np.max(FR) if FR.size else EPS
         Hill_Den = self.calculate_Hill(FR, w1)
 
         LID_FIE = Hill_Num / Hill_Den
         return LID_FIE
 
     def compute_GIE_LID(self, phi, G):
-        """
-        Computes LID using the GIE (General Iteration Estimator) approach.
-        """
-        k = len(phi)
-        # w0 and R for numerator
-        w0 = phi[0] - phi[k-1]
-        R = phi[1:k-1] - phi[k-1]
-        Hill_Num = self.calculate_Hill(R, w0)
+        epsilon = 1e-7
+        limit0 = np.mean(phi[-3:])
+        R = np.abs(phi - limit0)
+        w0 = np.max(R) if R.size else EPS
 
-        # w1 and FR for denominator
-        w1 = G[0] - G[k-1]
-        FR = G[1:k-1] - G[k-1]
-        Hill_Den = self.calculate_Hill(FR, w1)
-
-        LID_GIE = Hill_Num / Hill_Den
-        return LID_GIE
-
+        limit1 = np.mean(G[-3:])
+        FR = np.abs(G - limit1)
+        w1 = np.max(FR) if FR.size else EPS
+        
+        mask = (R > EPS) & (FR > EPS); Rn, FRn = R[mask], FR[mask]
+        k = Rn.shape[0] - 1
+        if k <= 4: return EPS
+        hn = - (k / np.sum(np.log(np.abs(Rn / (w0 + epsilon)))))
+        hd = - (k / np.sum(np.log(np.abs(FRn / (w1 + epsilon)))))
+        gie = hn / hd if hd != 0 else np.nan
+        return float(gie)
+    
     def compute_Bayesian_LID(self, phi, Num0, Den0):
-        """
-        Computes LID using a Bayesian-Gamma approach.
-        """
-        k = len(phi)
-
-        # Denominator part
-        w0 = phi[0] - phi[k-1]
-        R = phi[1:k-2] - phi[k-1]
-        Hill_a = self.calculate_Hill(R, w0)
-        Den1 = 1 / Hill_a if Hill_a != 0 else 0
-
-        # Numerator part
-        w1 = phi[1] - phi[k-1]
-        FR = phi[2:k-1] - phi[k-1]
-        Hill_Fa = self.calculate_Hill(FR, w1)
-        Num1 = 1 / Hill_Fa if Hill_Fa != 0 else 0
-
+        epsilon = 1e-7
+    
+        # --- Compute deviations ---
+        limit0 = np.mean(phi[-3:])
+        R = np.abs(phi[0:k-2] - limit0) 
+        w0 = np.max(R)
+    
+        FR = np.abs(phi[1:k-1] - limit0) 
+        w1 = np.max(FR)
+    
+        # Paired filtering: remove any index where either deviation is zero ---
+        mask = (R > EPS) & (FR > EPS)
+        R_non_zero = R[mask]
+        FR_non_zero = FR[mask]
+    
+        # --- k value ---
+        k = R_non_zero.shape[0] - 1
+        if k <= 4:
+            return EPS, 0.0, 0.0  # No valid samples → return NaNs and zero increments
+    
+        # --- Hill estimates ---
+        hill_num = - (k / np.sum(np.log(np.abs(R_non_zero / (w0 + epsilon)))))
+        hill_den = - (k / np.sum(np.log(np.abs(FR_non_zero / (w1 + epsilon)))))
+    
+        # --- Check validity ---
+        if hill_num == 0 or hill_den == 0 or np.isnan(hill_num) or np.isnan(hill_den):
+            Num1, Den1 = 0.0, 0.0
+        else:
+            Num1 = 1.0 / hill_den   # Denominator's Hill goes in numerator's sum
+            Den1 = 1.0 / hill_num   # Numerator's Hill goes in denominator's sum
+    
+        # --- Update cumulative sums ---
         Num_cumulative = Num0 + Num1
         Den_cumulative = Den0 + Den1
-
-        if Den_cumulative != 0:
-            LID_Bay_a = Num_cumulative / Den_cumulative
-        else:
-            LID_Bay_a = np.nan
-
-        return LID_Bay_a, Num1, Den1
-
+    
+        # --- Compute Bayesian GIE ---
+        LID_Bayes = Num_cumulative / Den_cumulative if Den_cumulative != 0 else EPS
+    
+        return LID_Bayes, Num1, Den1
+    
     def compute_IR_LID(self, phi):
         """
         Computes LID using the IR (Iterative Ratio) estimator.
