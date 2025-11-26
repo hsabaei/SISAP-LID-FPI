@@ -45,7 +45,7 @@
   <hr>
   
 <h2><b>Citation</b></h2>
-<p>If you use this repository, please cite our paper:</p>
+<p>If you use this repository, please cite our papers:</p>
 <pre><code>
 @inproceedings{houle2024local,
   title={Local Intrinsic Dimensionality and the Convergence Order of Fixed-Point Iteration},
@@ -54,6 +54,15 @@
   pages={193--206},
   year={2024},
   organization={Springer}
+}
+
+  @article{houle2025local,
+  title={Local intrinsic dimensionality and the estimation of convergence order},
+  author={Houle, Michael E and Oria, Vincent and Sabaei, Hamideh},
+  journal={Information Systems},
+  pages={102648},
+  year={2025},
+  publisher={Elsevier}
 }
 </code></pre>
 
