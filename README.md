@@ -1,6 +1,12 @@
 <h1><b>Local Intrinsic Dimensionality and the Convergence Order of Fixed-Point Iteration</b></h1>
 
-<p>This repository contains the implementation of the methods and experiments described in the paper <i>"Local Intrinsic Dimensionality and the Convergence Order of Fixed-Point Iteration"</i>, presented at <b>SISAP 2024</b>.</p>
+<p>
+  This repository contains the implementation of the methods and experiments described in the paper
+  <i>"Local Intrinsic Dimensionality and the Convergence Order of Fixed-Point Iteration"</i>,
+  presented at <b>SISAP 2024</b>, and in its extended journal version:
+  <i>"Local intrinsic dimensionality and the estimation of convergence order"</i>,
+  published in <b>Information Systems</b> (Elsevier, 2025).
+</p>
 
 <hr>
 
