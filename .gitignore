@@ -1,3 +1,4 @@
-".vs/" 
-/temp/
-/.vs/
+.vs/
+temp/
+__pycache__/
+*.pyc
